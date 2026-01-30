@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useTabs } from './hooks/useTabs';
 import { useFile } from './hooks/useFile';
 import { TabBar } from './components/TabBar/TabBar';
@@ -25,6 +25,43 @@ function App() {
 
   const [showNewFileModal, setShowNewFileModal] = useState(false);
   const activeTab = getActiveTab();
+
+  // Define handler functions with useCallback
+  const handleNewFile = useCallback(async (fileType: string) => {
+    setShowNewFileModal(false);
+    const file = await createNewFile(fileType);
+    if (file) {
+      addTab(file.path, file.name, file.content, file.language);
+    }
+  }, [createNewFile, addTab]);
+
+  const handleOpenFile = useCallback(async () => {
+    const file = await openFile();
+    if (file) {
+      addTab(file.path, file.name, file.content, file.language);
+    }
+  }, [openFile, addTab]);
+
+  const handleSaveFile = useCallback(async () => {
+    if (!activeTab) return;
+
+    const success = await saveFile(activeTab.path, activeTab.content);
+    if (success) {
+      markTabSaved(activeTab.id);
+    }
+  }, [activeTab, saveFile, markTabSaved]);
+
+  const handleContentChange = useCallback((content: string) => {
+    if (activeTab) {
+      updateTabContent(activeTab.id, content);
+    }
+  }, [activeTab, updateTabContent]);
+
+  const handleToggleViewMode = useCallback(() => {
+    if (activeTab) {
+      toggleViewMode(activeTab.id);
+    }
+  }, [activeTab, toggleViewMode]);
 
   // Build Monaco command palette actions
   const editorActions = useMemo((): MonacoAction[] => {
@@ -99,7 +136,7 @@ function App() {
     }
 
     return actions;
-  }, [activeTab, activeTabId]);
+  }, [activeTab, activeTabId, handleOpenFile, handleSaveFile, handleToggleViewMode, closeTab]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -157,43 +194,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeTabId, activeTab]);
-
-  const handleNewFile = async (fileType: string) => {
-    setShowNewFileModal(false);
-    const file = await createNewFile(fileType);
-    if (file) {
-      addTab(file.path, file.name, file.content, file.language);
-    }
-  };
-
-  const handleOpenFile = async () => {
-    const file = await openFile();
-    if (file) {
-      addTab(file.path, file.name, file.content, file.language);
-    }
-  };
-
-  const handleSaveFile = async () => {
-    if (!activeTab) return;
-
-    const success = await saveFile(activeTab.path, activeTab.content);
-    if (success) {
-      markTabSaved(activeTab.id);
-    }
-  };
-
-  const handleContentChange = (content: string) => {
-    if (activeTab) {
-      updateTabContent(activeTab.id, content);
-    }
-  };
-
-  const handleToggleViewMode = () => {
-    if (activeTab) {
-      toggleViewMode(activeTab.id);
-    }
-  };
+  }, [activeTabId, activeTab, handleOpenFile, handleSaveFile]);
 
   const renderViewer = () => {
     if (!activeTab) {
