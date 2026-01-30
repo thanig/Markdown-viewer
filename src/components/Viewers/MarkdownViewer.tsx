@@ -4,7 +4,7 @@ import { markedHighlight } from 'marked-highlight';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/github-dark.css';
 import './MarkdownViewer.css';
-import { CodeEditor } from './CodeEditor';
+import { CodeEditor, MonacoAction } from './CodeEditor';
 import './MermaidBlock.css';
 import { MermaidBlock } from './MermaidBlock';
 import { createRoot } from 'react-dom/client';
@@ -13,6 +13,7 @@ interface MarkdownViewerProps {
   content: string;
   viewMode: 'rendered' | 'raw';
   onChange: (content: string) => void;
+  editorActions?: MonacoAction[];
 }
 
 // Configure marked with syntax highlighting
@@ -39,6 +40,7 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
   content,
   viewMode,
   onChange,
+  editorActions,
 }) => {
   const [html, setHtml] = useState('');
   const contentRef = useRef<HTMLDivElement>(null);
@@ -84,6 +86,7 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
           content={content}
           language="markdown"
           onChange={onChange}
+          actions={editorActions}
         />
       </div>
     );

@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { JsonView, allExpanded, defaultStyles } from 'react-json-view-lite';
 import 'react-json-view-lite/dist/index.css';
 import './JsonViewer.css';
-import { CodeEditor } from './CodeEditor';
+import { CodeEditor, MonacoAction } from './CodeEditor';
 
 interface JsonViewerProps {
   content: string;
   viewMode: 'rendered' | 'raw';
   onChange: (content: string) => void;
   onToggleMode: () => void;
+  editorActions?: MonacoAction[];
 }
 
 export const JsonViewer: React.FC<JsonViewerProps> = ({
@@ -16,6 +17,7 @@ export const JsonViewer: React.FC<JsonViewerProps> = ({
   viewMode,
   onChange,
   onToggleMode,
+  editorActions,
 }) => {
   const [jsonData, setJsonData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +59,27 @@ export const JsonViewer: React.FC<JsonViewerProps> = ({
   };
 
   if (viewMode === 'raw') {
+    // Add format and minify actions to editor
+    const jsonActions: MonacoAction[] = [
+      ...(editorActions || []),
+      {
+        id: 'json.format',
+        label: 'Format JSON',
+        keybindings: [],
+        contextMenuGroupId: '1_modification',
+        contextMenuOrder: 1,
+        run: handleFormat,
+      },
+      {
+        id: 'json.minify',
+        label: 'Minify JSON',
+        keybindings: [],
+        contextMenuGroupId: '1_modification',
+        contextMenuOrder: 2,
+        run: handleMinify,
+      },
+    ];
+
     return (
       <div className="json-viewer">
         <div className="viewer-toolbar">
@@ -75,6 +98,7 @@ export const JsonViewer: React.FC<JsonViewerProps> = ({
           content={content}
           language="json"
           onChange={onChange}
+          actions={jsonActions}
         />
       </div>
     );
