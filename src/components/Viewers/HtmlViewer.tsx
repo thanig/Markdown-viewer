@@ -1,12 +1,13 @@
 import React, { useEffect, useRef } from 'react';
 import './HtmlViewer.css';
-import { CodeEditor } from './CodeEditor';
+import { CodeEditor, MonacoAction } from './CodeEditor';
 
 interface HtmlViewerProps {
   content: string;
   viewMode: 'rendered' | 'raw';
   onChange: (content: string) => void;
   onToggleMode: () => void;
+  editorActions?: MonacoAction[];
 }
 
 export const HtmlViewer: React.FC<HtmlViewerProps> = ({
@@ -14,6 +15,7 @@ export const HtmlViewer: React.FC<HtmlViewerProps> = ({
   viewMode,
   onChange,
   onToggleMode,
+  editorActions,
 }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -42,6 +44,7 @@ export const HtmlViewer: React.FC<HtmlViewerProps> = ({
           content={content}
           language="html"
           onChange={onChange}
+          actions={editorActions}
         />
       </div>
     );

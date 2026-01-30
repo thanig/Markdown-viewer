@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useTabs } from './hooks/useTabs';
 import { useFile } from './hooks/useFile';
 import { TabBar } from './components/TabBar/TabBar';
 import { MarkdownViewer } from './components/Viewers/MarkdownViewer';
 import { JsonViewer } from './components/Viewers/JsonViewer';
 import { HtmlViewer } from './components/Viewers/HtmlViewer';
-import { CodeEditor } from './components/Viewers/CodeEditor';
+import { CodeEditor, MonacoAction } from './components/Viewers/CodeEditor';
 import './App.css';
 
 function App() {
@@ -25,6 +25,81 @@ function App() {
 
   const [showNewFileModal, setShowNewFileModal] = useState(false);
   const activeTab = getActiveTab();
+
+  // Build Monaco command palette actions
+  const editorActions = useMemo((): MonacoAction[] => {
+    const actions: MonacoAction[] = [
+      {
+        id: 'file.new',
+        label: 'New File',
+        keybindings: [],
+        contextMenuGroupId: '0_file',
+        contextMenuOrder: 1,
+        run: () => setShowNewFileModal(true),
+      },
+      {
+        id: 'file.open',
+        label: 'Open File',
+        keybindings: [],
+        contextMenuGroupId: '0_file',
+        contextMenuOrder: 2,
+        run: handleOpenFile,
+      },
+    ];
+
+    // Add save action if there's an active tab
+    if (activeTab) {
+      actions.push({
+        id: 'file.save',
+        label: 'Save File',
+        keybindings: [],
+        contextMenuGroupId: '0_file',
+        contextMenuOrder: 3,
+        run: handleSaveFile,
+      });
+
+      actions.push({
+        id: 'file.close',
+        label: 'Close Tab',
+        keybindings: [],
+        contextMenuGroupId: '0_file',
+        contextMenuOrder: 4,
+        run: () => closeTab(activeTab.id),
+      });
+
+      // Add view mode toggle based on file type
+      if (activeTab.language === 'markdown') {
+        actions.push({
+          id: 'view.toggleMarkdown',
+          label: activeTab.viewMode === 'rendered' ? 'Edit Raw Markdown' : 'Show Rendered Markdown',
+          keybindings: [],
+          contextMenuGroupId: '1_view',
+          contextMenuOrder: 1,
+          run: handleToggleViewMode,
+        });
+      } else if (activeTab.language === 'json') {
+        actions.push({
+          id: 'view.toggleJson',
+          label: activeTab.viewMode === 'rendered' ? 'Edit Raw JSON' : 'Show JSON Tree View',
+          keybindings: [],
+          contextMenuGroupId: '1_view',
+          contextMenuOrder: 1,
+          run: handleToggleViewMode,
+        });
+      } else if (activeTab.language === 'html') {
+        actions.push({
+          id: 'view.toggleHtml',
+          label: activeTab.viewMode === 'rendered' ? 'Edit Raw HTML' : 'Show Rendered HTML',
+          keybindings: [],
+          contextMenuGroupId: '1_view',
+          contextMenuOrder: 1,
+          run: handleToggleViewMode,
+        });
+      }
+    }
+
+    return actions;
+  }, [activeTab, activeTabId]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -147,6 +222,7 @@ function App() {
           viewMode={activeTab.viewMode}
           onChange={handleContentChange}
           onToggleMode={handleToggleViewMode}
+          editorActions={editorActions}
         />
       );
     }
@@ -158,6 +234,7 @@ function App() {
           viewMode={activeTab.viewMode}
           onChange={handleContentChange}
           onToggleMode={handleToggleViewMode}
+          editorActions={editorActions}
         />
       );
     }
@@ -169,6 +246,7 @@ function App() {
           viewMode={activeTab.viewMode}
           onChange={handleContentChange}
           onToggleMode={handleToggleViewMode}
+          editorActions={editorActions}
         />
       );
     }
@@ -179,6 +257,7 @@ function App() {
           content={activeTab.content}
           language={activeTab.language}
           onChange={handleContentChange}
+          actions={editorActions}
         />
       </div>
     );

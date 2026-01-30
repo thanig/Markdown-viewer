@@ -4,13 +4,14 @@ import { markedHighlight } from 'marked-highlight';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/github-dark.css';
 import './MarkdownViewer.css';
-import { CodeEditor } from './CodeEditor';
+import { CodeEditor, MonacoAction } from './CodeEditor';
 
 interface MarkdownViewerProps {
   content: string;
   viewMode: 'rendered' | 'raw';
   onChange: (content: string) => void;
   onToggleMode: () => void;
+  editorActions?: MonacoAction[];
 }
 
 // Configure marked with syntax highlighting
@@ -35,6 +36,7 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
   viewMode,
   onChange,
   onToggleMode,
+  editorActions,
 }) => {
   const [html, setHtml] = useState('');
 
@@ -57,6 +59,7 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
           content={content}
           language="markdown"
           onChange={onChange}
+          actions={editorActions}
         />
       </div>
     );
