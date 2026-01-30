@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useTabs } from './hooks/useTabs';
 import { useFile } from './hooks/useFile';
 import { TabBar } from './components/TabBar/TabBar';
