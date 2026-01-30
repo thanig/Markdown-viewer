@@ -40,13 +40,13 @@ function configureMarked() {
   markedConfigured = true;
 }
 
-export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
+export const MarkdownViewer = ({
   content,
   viewMode,
   onChange,
   onToggleMode,
   editorActions,
-}) => {
+}: MarkdownViewerProps) => {
   const [html, setHtml] = useState('');
   const configured = useRef(false);
 

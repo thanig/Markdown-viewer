@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import './HtmlViewer.css';
 import { CodeEditor, MonacoAction } from './CodeEditor';
 
@@ -10,24 +10,30 @@ interface HtmlViewerProps {
   editorActions?: MonacoAction[];
 }
 
-export const HtmlViewer: React.FC<HtmlViewerProps> = ({
+export const HtmlViewer = ({
   content,
   viewMode,
   onChange,
   onToggleMode,
   editorActions,
-}) => {
+}: HtmlViewerProps) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (viewMode === 'rendered' && iframeRef.current) {
-      const iframe = iframeRef.current;
-      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      try {
+        const iframe = iframeRef.current;
+        const doc = iframe.contentDocument || iframe.contentWindow?.document;
 
-      if (doc) {
-        doc.open();
-        doc.write(content);
-        doc.close();
+        if (doc) {
+          doc.open();
+          doc.write(content);
+          doc.close();
+          setError(null);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to render HTML');
       }
     }
   }, [content, viewMode]);
@@ -56,6 +62,7 @@ export const HtmlViewer: React.FC<HtmlViewerProps> = ({
         <button onClick={onToggleMode} className="toolbar-button">
           ✏️ Edit Raw
         </button>
+        {error && <span className="error-message">{error}</span>}
       </div>
       <iframe
         ref={iframeRef}

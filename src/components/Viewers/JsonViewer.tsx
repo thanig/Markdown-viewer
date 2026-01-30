@@ -12,13 +12,13 @@ interface JsonViewerProps {
   editorActions?: MonacoAction[];
 }
 
-export const JsonViewer: React.FC<JsonViewerProps> = ({
+export const JsonViewer = ({
   content,
   viewMode,
   onChange,
   onToggleMode,
   editorActions,
-}) => {
+}: JsonViewerProps) => {
   const [jsonData, setJsonData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [formatted, setFormatted] = useState(false);

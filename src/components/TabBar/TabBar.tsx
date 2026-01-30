@@ -1,3 +1,4 @@
+import { MouseEvent } from 'react';
 import { FileTab } from '../../types';
 import './TabBar.css';
 
@@ -8,8 +9,8 @@ interface TabBarProps {
   onTabClose: (id: string) => void;
 }
 
-export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, onTabClick, onTabClose }) => {
-  const handleClose = (e: React.MouseEvent, id: string) => {
+export const TabBar = ({ tabs, activeTabId, onTabClick, onTabClose }: TabBarProps) => {
+  const handleClose = (e: MouseEvent, id: string) => {
     e.stopPropagation();
     onTabClose(id);
   };
