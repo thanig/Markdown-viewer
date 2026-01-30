@@ -1,0 +1,31 @@
+.mermaid-chart {
+    background-color: transparent;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 16px 0;
+}
+
+.mermaid-error {
+    color: #ff5555;
+    padding: 8px;
+    border: 1px solid #ff5555;
+    border-radius: 4px;
+    background-color: rgba(255, 85, 85, 0.1);
+}
+
+.file-icon.loading {
+    animation: spin 1s linear infinite;
+    display: inline-block;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
