@@ -68,7 +68,7 @@ export const HtmlViewer = ({
         ref={iframeRef}
         className="html-preview"
         title="HTML Preview"
-        sandbox="allow-scripts"
+        sandbox="allow-same-origin allow-scripts"
       />
     </div>
   );
