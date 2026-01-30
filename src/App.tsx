@@ -1,9 +1,10 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTabs } from './hooks/useTabs';
 import { useFile } from './hooks/useFile';
 import { TabBar } from './components/TabBar/TabBar';
 import { MarkdownViewer } from './components/Viewers/MarkdownViewer';
 import { JsonViewer } from './components/Viewers/JsonViewer';
+import { HtmlViewer } from './components/Viewers/HtmlViewer';
 import { CodeEditor } from './components/Viewers/CodeEditor';
 import './App.css';
 
@@ -20,13 +21,20 @@ function App() {
     getActiveTab,
   } = useTabs();
 
-  const { openFile, saveFile } = useFile();
+  const { openFile, saveFile, createNewFile } = useFile();
 
+  const [showNewFileModal, setShowNewFileModal] = useState(false);
   const activeTab = getActiveTab();
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = async (e: KeyboardEvent) => {
+      // Cmd+N or Ctrl+N - New file
+      if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
+        e.preventDefault();
+        setShowNewFileModal(true);
+      }
+
       // Cmd+O or Ctrl+O - Open file
       if ((e.metaKey || e.ctrlKey) && e.key === 'o') {
         e.preventDefault();
@@ -62,11 +70,27 @@ function App() {
           toggleViewMode(activeTab.id);
         }
       }
+
+      // Cmd+Shift+H - Toggle HTML view mode
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'H') {
+        e.preventDefault();
+        if (activeTab && activeTab.language === 'html') {
+          toggleViewMode(activeTab.id);
+        }
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeTabId, activeTab]);
+
+  const handleNewFile = async (fileType: string) => {
+    setShowNewFileModal(false);
+    const file = await createNewFile(fileType);
+    if (file) {
+      addTab(file.path, file.name, file.content, file.language);
+    }
+  };
 
   const handleOpenFile = async () => {
     const file = await openFile();
@@ -102,10 +126,15 @@ function App() {
         <div className="empty-state">
           <div className="empty-state-content">
             <h2>No File Open</h2>
-            <p>Press <kbd>Cmd+O</kbd> to open a file</p>
-            <button onClick={handleOpenFile} className="open-button">
-              Open File
-            </button>
+            <p>Press <kbd>Cmd+N</kbd> to create a new file or <kbd>Cmd+O</kbd> to open an existing file</p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button onClick={() => setShowNewFileModal(true)} className="open-button">
+                New File
+              </button>
+              <button onClick={handleOpenFile} className="open-button">
+                Open File
+              </button>
+            </div>
           </div>
         </div>
       );
@@ -133,6 +162,17 @@ function App() {
       );
     }
 
+    if (activeTab.language === 'html') {
+      return (
+        <HtmlViewer
+          content={activeTab.content}
+          viewMode={activeTab.viewMode}
+          onChange={handleContentChange}
+          onToggleMode={handleToggleViewMode}
+        />
+      );
+    }
+
     return (
       <div className="code-viewer">
         <CodeEditor
@@ -148,6 +188,9 @@ function App() {
     <div className="app">
       <div className="header">
         <div className="menu-bar">
+          <button onClick={() => setShowNewFileModal(true)} className="menu-button">
+            New File
+          </button>
           <button onClick={handleOpenFile} className="menu-button">
             Open File
           </button>
@@ -167,6 +210,61 @@ function App() {
       <div className="content">
         {renderViewer()}
       </div>
+
+      {/* New File Modal */}
+      {showNewFileModal && (
+        <div className="modal-overlay" onClick={() => setShowNewFileModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2>Create New File</h2>
+            <p>Select file type:</p>
+            <div className="file-type-grid">
+              <button className="file-type-button" onClick={() => handleNewFile('markdown')}>
+                <span className="file-type-icon">📝</span>
+                <span className="file-type-name">Markdown</span>
+                <span className="file-type-ext">.md</span>
+              </button>
+              <button className="file-type-button" onClick={() => handleNewFile('html')}>
+                <span className="file-type-icon">🌐</span>
+                <span className="file-type-name">HTML</span>
+                <span className="file-type-ext">.html</span>
+              </button>
+              <button className="file-type-button" onClick={() => handleNewFile('json')}>
+                <span className="file-type-icon">📋</span>
+                <span className="file-type-name">JSON</span>
+                <span className="file-type-ext">.json</span>
+              </button>
+              <button className="file-type-button" onClick={() => handleNewFile('javascript')}>
+                <span className="file-type-icon">⚡</span>
+                <span className="file-type-name">JavaScript</span>
+                <span className="file-type-ext">.js</span>
+              </button>
+              <button className="file-type-button" onClick={() => handleNewFile('typescript')}>
+                <span className="file-type-icon">💠</span>
+                <span className="file-type-name">TypeScript</span>
+                <span className="file-type-ext">.ts</span>
+              </button>
+              <button className="file-type-button" onClick={() => handleNewFile('css')}>
+                <span className="file-type-icon">🎨</span>
+                <span className="file-type-name">CSS</span>
+                <span className="file-type-ext">.css</span>
+              </button>
+              <button className="file-type-button" onClick={() => handleNewFile('python')}>
+                <span className="file-type-icon">🐍</span>
+                <span className="file-type-name">Python</span>
+                <span className="file-type-ext">.py</span>
+              </button>
+              <button className="file-type-button" onClick={() => handleNewFile('text')}>
+                <span className="file-type-icon">📄</span>
+                <span className="file-type-name">Text</span>
+                <span className="file-type-ext">.txt</span>
+              </button>
+            </div>
+            <button className="modal-close-button" onClick={() => setShowNewFileModal(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

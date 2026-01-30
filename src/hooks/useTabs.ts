@@ -7,7 +7,7 @@ export const useTabs = () => {
 
   const addTab = useCallback((path: string, name: string, content: string, language: string) => {
     const id = `${path}-${Date.now()}`;
-    const viewMode = language === 'markdown' ? 'rendered' : 'raw';
+    const viewMode = (language === 'markdown' || language === 'html') ? 'rendered' : 'raw';
 
     const newTab: FileTab = {
       id,

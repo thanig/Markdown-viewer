@@ -51,10 +51,43 @@ export const useFile = () => {
     }
   };
 
+  const createNewFile = async (fileType: string): Promise<{ path: string; content: string; name: string; language: string } | null> => {
+    try {
+      // Get default extension and template content based on file type
+      const { extension, content: templateContent } = getTemplateForFileType(fileType);
+
+      // Show save dialog with suggested extension
+      const selected = await save({
+        filters: [{
+          name: fileType.charAt(0).toUpperCase() + fileType.slice(1) + ' File',
+          extensions: [extension],
+        }],
+        defaultPath: `untitled.${extension}`,
+      });
+
+      if (!selected) return null;
+
+      // Write template content to file
+      await writeTextFile(selected, templateContent);
+
+      // Extract file name
+      const name = selected.split('/').pop() || selected.split('\\').pop() || 'Untitled';
+
+      // Detect language
+      const language = getLanguageFromPath(selected);
+
+      return { path: selected, content: templateContent, name, language };
+    } catch (error) {
+      console.error('Failed to create file:', error);
+      return null;
+    }
+  };
+
   return {
     openFile,
     saveFile,
     saveFileAs,
+    createNewFile,
   };
 };
 
@@ -82,4 +115,54 @@ function getLanguageFromPath(path: string): string {
   };
 
   return languageMap[ext || ''] || 'plaintext';
+}
+
+function getTemplateForFileType(fileType: string): { extension: string; content: string } {
+  const templates: { [key: string]: { extension: string; content: string } } = {
+    'markdown': {
+      extension: 'md',
+      content: '# Untitled\n\nStart writing your markdown here...\n',
+    },
+    'json': {
+      extension: 'json',
+      content: '{\n  \n}\n',
+    },
+    'html': {
+      extension: 'html',
+      content: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+</head>
+<body>
+
+</body>
+</html>
+`,
+    },
+    'javascript': {
+      extension: 'js',
+      content: '// JavaScript file\n\n',
+    },
+    'typescript': {
+      extension: 'ts',
+      content: '// TypeScript file\n\n',
+    },
+    'css': {
+      extension: 'css',
+      content: '/* Stylesheet */\n\n',
+    },
+    'python': {
+      extension: 'py',
+      content: '# Python script\n\n',
+    },
+    'text': {
+      extension: 'txt',
+      content: '',
+    },
+  };
+
+  return templates[fileType] || { extension: 'txt', content: '' };
 }
