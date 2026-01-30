@@ -50,6 +50,19 @@ export const useFile = () => {
     }
   };
 
+  const openFilePath = async (filePath: string): Promise<{ path: string; content: string; name: string; language: string } | null> => {
+    try {
+      const content = await readTextFile(filePath);
+      const name = filePath.split('/').pop() || filePath.split('\\').pop() || 'Untitled';
+      const language = getLanguageFromPath(filePath);
+
+      return { path: filePath, content, name, language };
+    } catch (error) {
+      console.error('Failed to open file:', error);
+      return null;
+    }
+  };
+
   const createNewFile = async (fileType: string): Promise<{ path: string; content: string; name: string; language: string } | null> => {
     try {
       // Get default extension and template content based on file type
@@ -84,6 +97,7 @@ export const useFile = () => {
 
   return {
     openFile,
+    openFilePath,
     saveFile,
     saveFileAs,
     createNewFile,

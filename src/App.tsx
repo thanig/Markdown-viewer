@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useTabs } from './hooks/useTabs';
 import { useFile } from './hooks/useFile';
 import { TabBar } from './components/TabBar/TabBar';
+import { FileTree } from './components/FileTree/FileTree';
 import { MarkdownViewer } from './components/Viewers/MarkdownViewer';
 import { JsonViewer } from './components/Viewers/JsonViewer';
 import { HtmlViewer } from './components/Viewers/HtmlViewer';
@@ -21,9 +22,10 @@ function App() {
     getActiveTab,
   } = useTabs();
 
-  const { openFile, saveFile, createNewFile } = useFile();
+  const { openFile, openFilePath, saveFile, createNewFile } = useFile();
 
   const [showNewFileModal, setShowNewFileModal] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(true);
   const activeTab = getActiveTab();
 
   // Define handler functions with useCallback
@@ -62,6 +64,24 @@ function App() {
       toggleViewMode(activeTab.id);
     }
   }, [activeTab, toggleViewMode]);
+
+  const handleFileSelect = useCallback(async (path: string) => {
+    // Check if file is already open
+    const existingTab = tabs.find(tab => tab.path === path);
+    if (existingTab) {
+      setActiveTabId(existingTab.id);
+      return;
+    }
+
+    const file = await openFilePath(path);
+    if (file) {
+      addTab(file.path, file.name, file.content, file.language);
+    }
+  }, [tabs, openFilePath, addTab, setActiveTabId]);
+
+  const handleToggleSidebar = useCallback(() => {
+    setSidebarVisible(prev => !prev);
+  }, []);
 
   // Build Monaco command palette actions
   const editorActions = useMemo((): MonacoAction[] => {
@@ -190,11 +210,17 @@ function App() {
           toggleViewMode(activeTab.id);
         }
       }
+
+      // Cmd+B or Ctrl+B - Toggle sidebar
+      if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
+        e.preventDefault();
+        handleToggleSidebar();
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeTabId, activeTab, handleOpenFile, handleSaveFile]);
+  }, [activeTabId, activeTab, handleOpenFile, handleSaveFile, handleToggleSidebar]);
 
   const renderViewer = () => {
     if (!activeTab) {
@@ -268,6 +294,9 @@ function App() {
     <div className="app">
       <div className="header">
         <div className="menu-bar">
+          <button onClick={handleToggleSidebar} className="menu-button" title="Toggle Sidebar (Cmd+B)">
+            {sidebarVisible ? '◀' : '▶'}
+          </button>
           <button onClick={() => setShowNewFileModal(true)} className="menu-button">
             New File
           </button>
@@ -281,14 +310,21 @@ function App() {
           )}
         </div>
       </div>
-      <TabBar
-        tabs={tabs}
-        activeTabId={activeTabId}
-        onTabClick={setActiveTabId}
-        onTabClose={closeTab}
-      />
-      <div className="content">
-        {renderViewer()}
+      <div className="main-container">
+        {sidebarVisible && (
+          <FileTree onFileSelect={handleFileSelect} />
+        )}
+        <div className="editor-container">
+          <TabBar
+            tabs={tabs}
+            activeTabId={activeTabId}
+            onTabClick={setActiveTabId}
+            onTabClose={closeTab}
+          />
+          <div className="content">
+            {renderViewer()}
+          </div>
+        </div>
       </div>
 
       {/* New File Modal */}

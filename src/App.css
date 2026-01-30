@@ -33,6 +33,20 @@
   background-color: var(--bg-tertiary);
 }
 
+/* Main Layout */
+.main-container {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.editor-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
 .content {
   flex: 1;
   overflow: hidden;
