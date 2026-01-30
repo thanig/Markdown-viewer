@@ -1,4 +1,3 @@
-import React from 'react';
 import { FileTab } from '../../types';
 import './TabBar.css';
 

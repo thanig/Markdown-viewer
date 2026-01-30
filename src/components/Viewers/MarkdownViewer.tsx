@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { marked } from 'marked';
 import { markedHighlight } from 'marked-highlight';
 import hljs from 'highlight.js';
@@ -14,22 +14,31 @@ interface MarkdownViewerProps {
   editorActions?: MonacoAction[];
 }
 
-// Configure marked with syntax highlighting
-marked.use(
-  markedHighlight({
-    langPrefix: 'hljs language-',
-    highlight(code, lang) {
-      const language = hljs.getLanguage(lang) ? lang : 'plaintext';
-      return hljs.highlight(code, { language }).value;
-    }
-  })
-);
+// Lazy initialization flag
+let markedConfigured = false;
 
-// Configure marked options
-marked.setOptions({
-  gfm: true,
-  breaks: true,
-});
+function configureMarked() {
+  if (markedConfigured) return;
+
+  // Configure marked with syntax highlighting
+  marked.use(
+    markedHighlight({
+      langPrefix: 'hljs language-',
+      highlight(code, lang) {
+        const language = hljs.getLanguage(lang) ? lang : 'plaintext';
+        return hljs.highlight(code, { language }).value;
+      }
+    })
+  );
+
+  // Configure marked options
+  marked.setOptions({
+    gfm: true,
+    breaks: true,
+  });
+
+  markedConfigured = true;
+}
 
 export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
   content,
@@ -39,8 +48,14 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
   editorActions,
 }) => {
   const [html, setHtml] = useState('');
+  const configured = useRef(false);
 
   useEffect(() => {
+    if (!configured.current) {
+      configureMarked();
+      configured.current = true;
+    }
+
     if (viewMode === 'rendered') {
       const rendered = marked.parse(content) as string;
       setHtml(rendered);
