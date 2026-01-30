@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { open } from '@tauri-apps/api/dialog';
 import './FileTree.css';
@@ -11,6 +11,10 @@ interface FileEntry {
 
 interface FileTreeProps {
   onFileSelect: (path: string) => void;
+  rootPath: string | null;
+  onRootPathChange: (path: string | null) => void;
+  width: number;
+  onWidthChange: (width: number) => void;
 }
 
 interface TreeNodeProps {
@@ -106,11 +110,18 @@ const TreeNode = ({ entry, onFileSelect, level }: TreeNodeProps) => {
   );
 };
 
-export const FileTree = ({ onFileSelect }: FileTreeProps) => {
-  const [rootPath, setRootPath] = useState<string | null>(null);
+export const FileTree = ({
+  onFileSelect,
+  rootPath,
+  onRootPathChange,
+  width,
+  onWidthChange,
+}: FileTreeProps) => {
   const [rootEntries, setRootEntries] = useState<FileEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isResizing = useRef(false);
+  const sidebarRef = useRef<HTMLDivElement>(null);
 
   const loadDirectory = useCallback(async (path: string) => {
     setIsLoading(true);
@@ -118,7 +129,6 @@ export const FileTree = ({ onFileSelect }: FileTreeProps) => {
     try {
       const entries = await invoke<FileEntry[]>('read_directory', { path });
       setRootEntries(entries);
-      setRootPath(path);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load directory');
       setRootEntries([]);
@@ -126,6 +136,15 @@ export const FileTree = ({ onFileSelect }: FileTreeProps) => {
       setIsLoading(false);
     }
   }, []);
+
+  // Load directory when rootPath changes
+  useEffect(() => {
+    if (rootPath) {
+      loadDirectory(rootPath);
+    } else {
+      setRootEntries([]);
+    }
+  }, [rootPath, loadDirectory]);
 
   const handleOpenFolder = async () => {
     try {
@@ -135,7 +154,7 @@ export const FileTree = ({ onFileSelect }: FileTreeProps) => {
       });
 
       if (selected && typeof selected === 'string') {
-        await loadDirectory(selected);
+        onRootPathChange(selected);
       }
     } catch (err) {
       console.error('Failed to open folder:', err);
@@ -143,15 +162,46 @@ export const FileTree = ({ onFileSelect }: FileTreeProps) => {
   };
 
   const handleCloseFolder = () => {
-    setRootPath(null);
+    onRootPathChange(null);
     setRootEntries([]);
     setError(null);
   };
 
+  // Resize handlers
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, []);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing.current) return;
+
+      const newWidth = Math.min(Math.max(150, e.clientX), 500);
+      onWidthChange(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      isResizing.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [onWidthChange]);
+
   const folderName = rootPath?.split('/').pop() || rootPath?.split('\\').pop() || 'Folder';
 
   return (
-    <div className="file-tree">
+    <div className="file-tree" ref={sidebarRef} style={{ width: `${width}px` }}>
       <div className="file-tree-header">
         <span className="file-tree-title">Explorer</span>
         <div className="file-tree-actions">
@@ -214,6 +264,8 @@ export const FileTree = ({ onFileSelect }: FileTreeProps) => {
           </>
         )}
       </div>
+
+      <div className="resize-handle" onMouseDown={handleMouseDown} />
     </div>
   );
 };

@@ -26,6 +26,8 @@ function App() {
 
   const [showNewFileModal, setShowNewFileModal] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [sidebarWidth, setSidebarWidth] = useState(250);
+  const [folderPath, setFolderPath] = useState<string | null>(null);
   const activeTab = getActiveTab();
 
   // Define handler functions with useCallback
@@ -312,7 +314,13 @@ function App() {
       </div>
       <div className="main-container">
         {sidebarVisible && (
-          <FileTree onFileSelect={handleFileSelect} />
+          <FileTree
+            onFileSelect={handleFileSelect}
+            rootPath={folderPath}
+            onRootPathChange={setFolderPath}
+            width={sidebarWidth}
+            onWidthChange={setSidebarWidth}
+          />
         )}
         <div className="editor-container">
           <TabBar
