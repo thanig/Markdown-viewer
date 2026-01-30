@@ -1,6 +1,6 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useTabs } from './hooks/useTabs';
-import { useFile } from './hooks/useFile';
+import { useFile, isUntitledPath } from './hooks/useFile';
 import { TabBar } from './components/TabBar/TabBar';
 import { FileTree } from './components/FileTree/FileTree';
 import { MarkdownViewer } from './components/Viewers/MarkdownViewer';
@@ -19,10 +19,12 @@ function App() {
     updateTabContent,
     toggleViewMode,
     markTabSaved,
+    updateTabPathAndName,
     getActiveTab,
   } = useTabs();
 
-  const { openFile, openFilePath, saveFile, createNewFile } = useFile();
+  const { openFile, openFilePath, saveFile, createUntitledFile, saveUntitledFile } = useFile();
+  const untitledCounter = useRef(1);
 
   const [showNewFileModal, setShowNewFileModal] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(true);
@@ -31,13 +33,12 @@ function App() {
   const activeTab = getActiveTab();
 
   // Define handler functions with useCallback
-  const handleNewFile = useCallback(async (fileType: string) => {
+  const handleNewFile = useCallback((fileType: string) => {
     setShowNewFileModal(false);
-    const file = await createNewFile(fileType);
-    if (file) {
-      addTab(file.path, file.name, file.content, file.language);
-    }
-  }, [createNewFile, addTab]);
+    const file = createUntitledFile(fileType, untitledCounter.current);
+    untitledCounter.current += 1;
+    addTab(file.path, file.name, file.content, file.language);
+  }, [createUntitledFile, addTab]);
 
   const handleOpenFile = useCallback(async () => {
     const file = await openFile();
@@ -49,11 +50,32 @@ function App() {
   const handleSaveFile = useCallback(async () => {
     if (!activeTab) return;
 
-    const success = await saveFile(activeTab.path, activeTab.content);
-    if (success) {
-      markTabSaved(activeTab.id);
+    // Check if this is an untitled file
+    if (isUntitledPath(activeTab.path)) {
+      // Get file type from language
+      const fileTypeMap: { [key: string]: string } = {
+        'markdown': 'markdown',
+        'json': 'json',
+        'javascript': 'javascript',
+        'typescript': 'typescript',
+        'html': 'html',
+        'css': 'css',
+        'python': 'python',
+        'plaintext': 'text',
+      };
+      const fileType = fileTypeMap[activeTab.language] || 'text';
+
+      const result = await saveUntitledFile(activeTab.content, fileType);
+      if (result) {
+        updateTabPathAndName(activeTab.id, result.path, result.name, result.language);
+      }
+    } else {
+      const success = await saveFile(activeTab.path, activeTab.content);
+      if (success) {
+        markTabSaved(activeTab.id);
+      }
     }
-  }, [activeTab, saveFile, markTabSaved]);
+  }, [activeTab, saveFile, saveUntitledFile, markTabSaved, updateTabPathAndName]);
 
   const handleContentChange = useCallback((content: string) => {
     if (activeTab) {
