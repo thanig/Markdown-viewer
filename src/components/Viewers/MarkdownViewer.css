@@ -144,3 +144,18 @@
   border-top: 1px solid var(--border-color);
   margin: 24px 0;
 }
+
+/* Mermaid diagram styles */
+.markdown-content .mermaid {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 24px 0;
+  padding: 16px;
+  background-color: transparent;
+}
+
+.markdown-content .mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
