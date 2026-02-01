@@ -1,6 +1,14 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { open } from '@tauri-apps/api/dialog';
+import {
+  FolderIcon,
+  FolderOpenIcon,
+  FolderPlusIcon,
+  XIcon,
+  ChevronRightIcon,
+  getFileIcon,
+} from '../Icons/Icons';
 import './FileTree.css';
 
 interface FileEntry {
@@ -53,34 +61,15 @@ const TreeNode = ({ entry, onFileSelect, level }: TreeNodeProps) => {
     }
   };
 
-  const getFileIcon = () => {
+  const renderIcon = () => {
     if (entry.is_dir) {
-      return isExpanded ? '📂' : '📁';
+      return isExpanded ? (
+        <FolderOpenIcon size={16} className="icon-folder" />
+      ) : (
+        <FolderIcon size={16} className="icon-folder" />
+      );
     }
-
-    const ext = entry.name.split('.').pop()?.toLowerCase();
-    switch (ext) {
-      case 'md':
-      case 'markdown':
-        return '📝';
-      case 'json':
-        return '📋';
-      case 'html':
-      case 'htm':
-        return '🌐';
-      case 'js':
-      case 'jsx':
-        return '⚡';
-      case 'ts':
-      case 'tsx':
-        return '💠';
-      case 'css':
-        return '🎨';
-      case 'py':
-        return '🐍';
-      default:
-        return '📄';
-    }
+    return getFileIcon(entry.name);
   };
 
   return (
@@ -90,9 +79,16 @@ const TreeNode = ({ entry, onFileSelect, level }: TreeNodeProps) => {
         style={{ paddingLeft: `${level * 16 + 8}px` }}
         onClick={handleClick}
       >
-        <span className="tree-icon">{getFileIcon()}</span>
+        {entry.is_dir && (
+          <span className={`tree-chevron ${isExpanded ? 'expanded' : ''}`}>
+            <ChevronRightIcon size={14} />
+          </span>
+        )}
+        <span className={`tree-icon ${entry.is_dir ? 'folder' : ''}`}>
+          {renderIcon()}
+        </span>
         <span className="tree-name">{entry.name}</span>
-        {isLoading && <span className="tree-loading">...</span>}
+        {isLoading && <span className="tree-loading">loading...</span>}
       </div>
       {isExpanded && children.length > 0 && (
         <div className="tree-children">
@@ -210,7 +206,7 @@ export const FileTree = ({
             onClick={handleOpenFolder}
             title="Open Folder"
           >
-            📂
+            <FolderPlusIcon size={16} />
           </button>
           {rootPath && (
             <button
@@ -218,7 +214,7 @@ export const FileTree = ({
               onClick={handleCloseFolder}
               title="Close Folder"
             >
-              ✕
+              <XIcon size={16} />
             </button>
           )}
         </div>
@@ -237,6 +233,7 @@ export const FileTree = ({
           <div className="file-tree-empty">
             <p>No folder open</p>
             <button onClick={handleOpenFolder} className="open-folder-button">
+              <FolderPlusIcon size={16} />
               Open Folder
             </button>
           </div>
@@ -245,7 +242,9 @@ export const FileTree = ({
         {rootPath && !isLoading && (
           <>
             <div className="file-tree-root">
-              <span className="root-icon">📂</span>
+              <span className="root-icon">
+                <FolderOpenIcon size={18} />
+              </span>
               <span className="root-name">{folderName}</span>
             </div>
             <div className="file-tree-entries">

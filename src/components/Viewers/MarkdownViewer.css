@@ -146,16 +146,33 @@
 }
 
 /* Mermaid diagram styles */
-.markdown-content .mermaid {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin: 24px 0;
+.mermaid-container {
+  margin: 16px 0;
   padding: 16px;
-  background-color: transparent;
+  background-color: var(--bg-secondary);
+  border-radius: 8px;
+  overflow-x: auto;
 }
 
-.markdown-content .mermaid svg {
+.mermaid-container .mermaid {
+  display: flex;
+  justify-content: center;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+}
+
+.mermaid-container .mermaid svg {
   max-width: 100%;
   height: auto;
+}
+
+/* Mermaid error styling */
+.mermaid-container .error-icon,
+.mermaid-container .error-text {
+  fill: var(--error);
+}
+
+.mermaid-container pre.mermaid[data-processed="true"] {
+  background: transparent;
 }

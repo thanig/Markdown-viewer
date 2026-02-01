@@ -1,5 +1,5 @@
-import { useEffect, useState, useRef } from 'react';
-import { marked } from 'marked';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { marked, Renderer } from 'marked';
 import { markedHighlight } from 'marked-highlight';
 import hljs from 'highlight.js';
 import mermaid from 'mermaid';
@@ -56,20 +56,52 @@ mermaid.initialize({
 
 // Lazy initialization flag
 let markedConfigured = false;
+let mermaidInitialized = false;
+
+function initializeMermaid() {
+  if (mermaidInitialized) return;
+
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'dark',
+    securityLevel: 'loose',
+    fontFamily: 'var(--font-mono)',
+  });
+
+  mermaidInitialized = true;
+}
 
 function configureMarked() {
   if (markedConfigured) return;
+
+  // Custom renderer to handle mermaid code blocks
+  const renderer = new Renderer();
+  const originalCode = renderer.code.bind(renderer);
+
+  renderer.code = function(code: string, infostring: string | undefined, escaped: boolean): string {
+    if (infostring === 'mermaid') {
+      // Return a container for mermaid to render into
+      const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
+      return `<div class="mermaid-container"><pre class="mermaid" id="${id}">${code}</pre></div>`;
+    }
+    // Use original renderer for other code blocks
+    return originalCode(code, infostring, escaped);
+  };
 
   // Configure marked with syntax highlighting
   marked.use(
     markedHighlight({
       langPrefix: 'hljs language-',
       highlight(code, lang) {
+        if (lang === 'mermaid') return code; // Don't highlight mermaid
         const language = hljs.getLanguage(lang) ? lang : 'plaintext';
         return hljs.highlight(code, { language }).value;
       }
     })
   );
+
+  // Apply custom renderer
+  marked.use({ renderer });
 
   // Configure marked options
   marked.setOptions({
@@ -90,60 +122,43 @@ export const MarkdownViewer = ({
   const [html, setHtml] = useState('');
   const configured = useRef(false);
   const contentRef = useRef<HTMLDivElement>(null);
-  const mermaidCounterRef = useRef(0);
 
+  // Initialize marked and mermaid
   useEffect(() => {
     if (!configured.current) {
       configureMarked();
+      initializeMermaid();
       configured.current = true;
     }
+  }, []);
 
+  // Parse markdown when content changes
+  useEffect(() => {
     if (viewMode === 'rendered') {
-      // Reset mermaid counter for each render
-      mermaidCounterRef.current = 0;
-
-      // Custom renderer for mermaid code blocks
-      const renderer = new marked.Renderer();
-      const originalCodeRenderer = renderer.code.bind(renderer);
-
-      renderer.code = (code: string, language: string | undefined, escaped: boolean) => {
-        if (language === 'mermaid') {
-          const id = `mermaid-${Date.now()}-${mermaidCounterRef.current++}`;
-          return `<div class="mermaid" id="${id}">${code}</div>`;
-        }
-        return originalCodeRenderer(code, language, escaped);
-      };
-
-      marked.use({ renderer });
       const rendered = marked.parse(content) as string;
       setHtml(rendered);
     }
   }, [content, viewMode]);
 
   // Render mermaid diagrams after HTML is set
-  useEffect(() => {
-    if (viewMode === 'rendered' && contentRef.current) {
+  const renderMermaidDiagrams = useCallback(async () => {
+    if (contentRef.current && viewMode === 'rendered') {
       const mermaidElements = contentRef.current.querySelectorAll('.mermaid');
-
       if (mermaidElements.length > 0) {
-        mermaidElements.forEach((element) => {
-          const id = element.id;
-          const code = element.textContent || '';
-
-          // Clear the element before rendering
-          element.textContent = '';
-
-          // Render the mermaid diagram
-          mermaid.render(id, code).then(({ svg }) => {
-            element.innerHTML = svg;
-          }).catch((error) => {
-            console.error('Mermaid rendering error:', error);
-            element.innerHTML = `<pre>Error rendering diagram: ${error.message}</pre>`;
+        try {
+          await mermaid.run({
+            nodes: mermaidElements as NodeListOf<HTMLElement>,
           });
-        });
+        } catch (error) {
+          console.error('Mermaid rendering error:', error);
+        }
       }
     }
-  }, [html, viewMode]);
+  }, [viewMode]);
+
+  useEffect(() => {
+    renderMermaidDiagrams();
+  }, [html, renderMermaidDiagrams]);
 
   if (viewMode === 'raw') {
     return (
