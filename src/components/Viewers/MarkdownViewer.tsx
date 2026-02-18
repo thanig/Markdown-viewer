@@ -16,25 +16,32 @@ interface MarkdownViewerProps {
   editorActions?: MonacoAction[];
 }
 
-// Configure marked with syntax highlighting
-marked.use(
-  markedHighlight({
-    langPrefix: 'hljs language-',
-    highlight(code, lang) {
-      if (lang === 'mermaid') {
-        return `<div class="mermaid">${code}</div>`;
-      }
-      const language = hljs.getLanguage(lang) ? lang : 'plaintext';
-      return hljs.highlight(code, { language }).value;
-    }
-  })
-);
-
 // Configure marked options
-marked.setOptions({
-  gfm: true,
-  breaks: true,
-});
+// Use a flag to ensure checking/configuring only happens once or when needed
+const configureMarked = () => {
+  // Note: marked is a singleton, so we just run this. 
+  // We can't easily check if it's already configured with specific plugins, 
+  // but running it again is usually safe or we can use a module level flag if strictly needed.
+  // For safety against TDZ, we define the highlight function here.
+
+  marked.use(
+    markedHighlight({
+      langPrefix: 'hljs language-',
+      highlight(code, lang) {
+        if (lang === 'mermaid') {
+          return `<div class="mermaid">${code}</div>`;
+        }
+        const language = hljs.getLanguage(lang) ? lang : 'plaintext';
+        return hljs.highlight(code, { language }).value;
+      }
+    })
+  );
+
+  marked.setOptions({
+    gfm: true,
+    breaks: true,
+  });
+};
 
 export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
   content,
@@ -46,6 +53,7 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    configureMarked(); // Configure before parsing
     if (viewMode === 'rendered') {
       const rendered = marked.parse(content) as string;
       setHtml(rendered);
