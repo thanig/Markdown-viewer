@@ -1,4 +1,3 @@
-import React from 'react';
 import Editor from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
 import './CodeEditor.css';
@@ -19,7 +18,7 @@ interface CodeEditorProps {
   actions?: MonacoAction[];
 }
 
-export const CodeEditor: React.FC<CodeEditorProps> = ({ content, language, onChange, actions }) => {
+export const CodeEditor = ({ content, language, onChange, actions }: CodeEditorProps) => {
   const handleChange = (value: string | undefined) => {
     if (value !== undefined) {
       onChange(value);

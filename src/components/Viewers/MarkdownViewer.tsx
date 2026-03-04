@@ -1,95 +1,173 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { marked } from 'marked';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { marked, Renderer } from 'marked';
 import { markedHighlight } from 'marked-highlight';
 import hljs from 'highlight.js';
+import mermaid from 'mermaid';
 import 'highlight.js/styles/github-dark.css';
 import './MarkdownViewer.css';
 import { CodeEditor, MonacoAction } from './CodeEditor';
-import './MermaidBlock.css';
-import { MermaidBlock } from './MermaidBlock';
-import { createRoot } from 'react-dom/client';
 
 interface MarkdownViewerProps {
   content: string;
   viewMode: 'rendered' | 'raw';
   onChange: (content: string) => void;
+  onToggleMode: () => void;
   editorActions?: MonacoAction[];
 }
 
-// Configure marked options
-// Use a flag to ensure checking/configuring only happens once or when needed
-const configureMarked = () => {
-  // Note: marked is a singleton, so we just run this. 
-  // We can't easily check if it's already configured with specific plugins, 
-  // but running it again is usually safe or we can use a module level flag if strictly needed.
-  // For safety against TDZ, we define the highlight function here.
+// Configure mermaid with custom color palette
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'base',
+  themeVariables: {
+    // Primary colors based on the design
+    primaryColor: '#E6E6FA',        // Light lavender for boxes
+    primaryTextColor: '#1a1a1a',     // Dark text for readability
+    primaryBorderColor: '#9370DB',   // Medium purple for borders
+    lineColor: '#9370DB',            // Purple for connection lines
+    secondaryColor: '#FFFACD',       // Light yellow/cream for containers
+    tertiaryColor: '#F0E68C',        // Khaki for tertiary elements
 
+    // Background colors
+    background: '#FFFACD',           // Light yellow background
+    mainBkg: '#E6E6FA',              // Light lavender for main elements
+    secondaryBkg: '#FFFACD',         // Light yellow for secondary elements
+    tertiaryBkg: '#FFF8DC',          // Cornsilk for tertiary background
+
+    // Text colors
+    textColor: '#1a1a1a',            // Dark text
+    labelTextColor: '#1a1a1a',       // Dark label text
+
+    // Node colors
+    nodeBorder: '#9370DB',           // Purple node borders
+    clusterBkg: '#FFFACD',           // Light yellow for clusters/containers
+    clusterBorder: '#9370DB',        // Purple cluster borders
+
+    // Additional colors
+    edgeLabelBackground: '#ffffff',
+    fontSize: '14px',
+  },
+  flowchart: {
+    useMaxWidth: true,
+    htmlLabels: true,
+    curve: 'basis',
+  },
+});
+
+// Lazy initialization flag
+let markedConfigured = false;
+let mermaidInitialized = false;
+
+function initializeMermaid() {
+  if (mermaidInitialized) return;
+
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'dark',
+    securityLevel: 'loose',
+    fontFamily: 'var(--font-mono)',
+  });
+
+  mermaidInitialized = true;
+}
+
+function configureMarked() {
+  if (markedConfigured) return;
+
+  // Custom renderer to handle mermaid code blocks
+  const renderer = new Renderer();
+  const originalCode = renderer.code.bind(renderer);
+
+  renderer.code = function(code: string, infostring: string | undefined, escaped: boolean): string {
+    if (infostring === 'mermaid') {
+      // Return a container for mermaid to render into
+      const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
+      return `<div class="mermaid-container"><pre class="mermaid" id="${id}">${code}</pre></div>`;
+    }
+    // Use original renderer for other code blocks
+    return originalCode(code, infostring, escaped);
+  };
+
+  // Configure marked with syntax highlighting
   marked.use(
     markedHighlight({
       langPrefix: 'hljs language-',
       highlight(code, lang) {
-        if (lang === 'mermaid') {
-          return `<div class="mermaid">${code}</div>`;
-        }
+        if (lang === 'mermaid') return code; // Don't highlight mermaid
         const language = hljs.getLanguage(lang) ? lang : 'plaintext';
         return hljs.highlight(code, { language }).value;
       }
     })
   );
 
+  // Apply custom renderer
+  marked.use({ renderer });
+
+  // Configure marked options
   marked.setOptions({
     gfm: true,
     breaks: true,
   });
-};
 
-export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
+  markedConfigured = true;
+}
+
+export const MarkdownViewer = ({
   content,
   viewMode,
   onChange,
+  onToggleMode,
   editorActions,
-}) => {
+}: MarkdownViewerProps) => {
   const [html, setHtml] = useState('');
+  const configured = useRef(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
+  // Initialize marked and mermaid
   useEffect(() => {
-    configureMarked(); // Configure before parsing
+    if (!configured.current) {
+      configureMarked();
+      initializeMermaid();
+      configured.current = true;
+    }
+  }, []);
+
+  // Parse markdown when content changes
+  useEffect(() => {
     if (viewMode === 'rendered') {
       const rendered = marked.parse(content) as string;
       setHtml(rendered);
     }
   }, [content, viewMode]);
 
-  // Mermaid post-processing
-  useEffect(() => {
-    if (viewMode === 'rendered' && contentRef.current) {
-      // Find all mermaid divs that we created in the highlight function
-      // Note: marked-highlight might wrap the output in <pre><code>...</code></pre>
-      // But since we returned a div for mermaid, it might be inside pre/code.
-      // Actually, marked usually wraps code blocks in <pre><code>.
-      // If we want to replace the whole block, we need to be careful.
-
-      // Let's iterate over code blocks and check for language-mermaid class
-      const mermaidBlocks = contentRef.current.querySelectorAll('.language-mermaid');
-      mermaidBlocks.forEach((block) => {
-        const chartContent = block.textContent || '';
-        const container = document.createElement('div');
-        // Replace the <pre> parent if possible, or just the <code> block
-        const parent = block.parentElement; // usually <pre>
-
-        if (parent && parent.tagName === 'PRE') {
-          parent.replaceWith(container);
-          const root = createRoot(container);
-          root.render(<MermaidBlock chart={chartContent} />);
+  // Render mermaid diagrams after HTML is set
+  const renderMermaidDiagrams = useCallback(async () => {
+    if (contentRef.current && viewMode === 'rendered') {
+      const mermaidElements = contentRef.current.querySelectorAll('.mermaid');
+      if (mermaidElements.length > 0) {
+        try {
+          await mermaid.run({
+            nodes: mermaidElements as NodeListOf<HTMLElement>,
+          });
+        } catch (error) {
+          console.error('Mermaid rendering error:', error);
         }
-      });
+      }
     }
-  }, [html, viewMode]);
+  }, [viewMode]);
+
+  useEffect(() => {
+    renderMermaidDiagrams();
+  }, [html, renderMermaidDiagrams]);
 
   if (viewMode === 'raw') {
     return (
       <div className="markdown-viewer">
-        {/* Toolbar moved to main app header per request, keeping logic clean */}
+        <div className="viewer-toolbar">
+          <button onClick={onToggleMode} className="toolbar-button">
+            📄 Show Rendered
+          </button>
+        </div>
         <CodeEditor
           content={content}
           language="markdown"
@@ -102,6 +180,11 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
 
   return (
     <div className="markdown-viewer">
+      <div className="viewer-toolbar">
+        <button onClick={onToggleMode} className="toolbar-button">
+          ✏️ Edit Raw
+        </button>
+      </div>
       <div
         ref={contentRef}
         className="markdown-content"

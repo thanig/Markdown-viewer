@@ -61,6 +61,15 @@ export const useTabs = () => {
     );
   }, []);
 
+  // Update tab path and name after saving untitled file
+  const updateTabPathAndName = useCallback((id: string, path: string, name: string, language?: string) => {
+    setTabs(prev =>
+      prev.map(tab =>
+        tab.id === id ? { ...tab, path, name, isDirty: false, ...(language && { language }) } : tab
+      )
+    );
+  }, []);
+
   const getActiveTab = useCallback(() => {
     return tabs.find(tab => tab.id === activeTabId) || null;
   }, [tabs, activeTabId]);
@@ -74,6 +83,7 @@ export const useTabs = () => {
     updateTabContent,
     toggleViewMode,
     markTabSaved,
+    updateTabPathAndName,
     getActiveTab,
   };
 };

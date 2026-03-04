@@ -1,12 +1,26 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useTabs } from './hooks/useTabs';
-import { useFile } from './hooks/useFile';
+import { useFile, isUntitledPath } from './hooks/useFile';
 import { TabBar } from './components/TabBar/TabBar';
+import { FileTree } from './components/FileTree/FileTree';
 import { MarkdownViewer } from './components/Viewers/MarkdownViewer';
 import { JsonViewer } from './components/Viewers/JsonViewer';
 import { HtmlViewer } from './components/Viewers/HtmlViewer';
 import { CodeEditor, MonacoAction } from './components/Viewers/CodeEditor';
-import { FileBrowser } from './components/FileBrowser/FileBrowser';
+import {
+  SidebarIcon,
+  FilePlusIcon,
+  FolderOpenIcon,
+  SaveIcon,
+  MarkdownIcon,
+  HtmlIcon,
+  JsonIcon,
+  CodeIcon,
+  TypeScriptIcon,
+  CssIcon,
+  PythonIcon,
+  FileIcon,
+} from './components/Icons/Icons';
 import './App.css';
 
 function App() {
@@ -19,13 +33,93 @@ function App() {
     updateTabContent,
     toggleViewMode,
     markTabSaved,
+    updateTabPathAndName,
     getActiveTab,
   } = useTabs();
 
-  const { openFile, saveFile, openFolder, readDirectory, readFileContent, createNewFile } = useFile();
+  const { openFile, openFilePath, saveFile, createUntitledFile, saveUntitledFile } = useFile();
+  const untitledCounter = useRef(1);
 
   const [showNewFileModal, setShowNewFileModal] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [sidebarWidth, setSidebarWidth] = useState(250);
+  const [folderPath, setFolderPath] = useState<string | null>(null);
   const activeTab = getActiveTab();
+
+  // Define handler functions with useCallback
+  const handleNewFile = useCallback((fileType: string) => {
+    setShowNewFileModal(false);
+    const file = createUntitledFile(fileType, untitledCounter.current);
+    untitledCounter.current += 1;
+    addTab(file.path, file.name, file.content, file.language);
+  }, [createUntitledFile, addTab]);
+
+  const handleOpenFile = useCallback(async () => {
+    const file = await openFile();
+    if (file) {
+      addTab(file.path, file.name, file.content, file.language);
+    }
+  }, [openFile, addTab]);
+
+  const handleSaveFile = useCallback(async () => {
+    if (!activeTab) return;
+
+    // Check if this is an untitled file
+    if (isUntitledPath(activeTab.path)) {
+      // Get file type from language
+      const fileTypeMap: { [key: string]: string } = {
+        'markdown': 'markdown',
+        'json': 'json',
+        'javascript': 'javascript',
+        'typescript': 'typescript',
+        'html': 'html',
+        'css': 'css',
+        'python': 'python',
+        'plaintext': 'text',
+      };
+      const fileType = fileTypeMap[activeTab.language] || 'text';
+
+      const result = await saveUntitledFile(activeTab.content, fileType);
+      if (result) {
+        updateTabPathAndName(activeTab.id, result.path, result.name, result.language);
+      }
+    } else {
+      const success = await saveFile(activeTab.path, activeTab.content);
+      if (success) {
+        markTabSaved(activeTab.id);
+      }
+    }
+  }, [activeTab, saveFile, saveUntitledFile, markTabSaved, updateTabPathAndName]);
+
+  const handleContentChange = useCallback((content: string) => {
+    if (activeTab) {
+      updateTabContent(activeTab.id, content);
+    }
+  }, [activeTab, updateTabContent]);
+
+  const handleToggleViewMode = useCallback(() => {
+    if (activeTab) {
+      toggleViewMode(activeTab.id);
+    }
+  }, [activeTab, toggleViewMode]);
+
+  const handleFileSelect = useCallback(async (path: string) => {
+    // Check if file is already open
+    const existingTab = tabs.find(tab => tab.path === path);
+    if (existingTab) {
+      setActiveTabId(existingTab.id);
+      return;
+    }
+
+    const file = await openFilePath(path);
+    if (file) {
+      addTab(file.path, file.name, file.content, file.language);
+    }
+  }, [tabs, openFilePath, addTab, setActiveTabId]);
+
+  const handleToggleSidebar = useCallback(() => {
+    setSidebarVisible(prev => !prev);
+  }, []);
 
   // Build Monaco command palette actions
   const editorActions = useMemo((): MonacoAction[] => {
@@ -100,7 +194,7 @@ function App() {
     }
 
     return actions;
-  }, [activeTab, activeTabId]);
+  }, [activeTab, activeTabId, handleOpenFile, handleSaveFile, handleToggleViewMode, closeTab]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -154,47 +248,17 @@ function App() {
           toggleViewMode(activeTab.id);
         }
       }
+
+      // Cmd+B or Ctrl+B - Toggle sidebar
+      if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
+        e.preventDefault();
+        handleToggleSidebar();
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeTabId, activeTab]);
-
-  const handleNewFile = async (fileType: string) => {
-    setShowNewFileModal(false);
-    const file = await createNewFile(fileType);
-    if (file) {
-      addTab(file.path, file.name, file.content, file.language);
-    }
-  };
-
-  const handleOpenFile = async () => {
-    const file = await openFile();
-    if (file) {
-      addTab(file.path, file.name, file.content, file.language);
-    }
-  };
-
-  const handleSaveFile = async () => {
-    if (!activeTab) return;
-
-    const success = await saveFile(activeTab.path, activeTab.content);
-    if (success) {
-      markTabSaved(activeTab.id);
-    }
-  };
-
-  const handleContentChange = (content: string) => {
-    if (activeTab) {
-      updateTabContent(activeTab.id, content);
-    }
-  };
-
-  const handleToggleViewMode = () => {
-    if (activeTab) {
-      toggleViewMode(activeTab.id);
-    }
-  };
+  }, [activeTabId, activeTab, handleOpenFile, handleSaveFile, handleToggleSidebar]);
 
   const renderViewer = () => {
     if (!activeTab) {
@@ -222,6 +286,7 @@ function App() {
           content={activeTab.content}
           viewMode={activeTab.viewMode}
           onChange={handleContentChange}
+          onToggleMode={handleToggleViewMode}
           editorActions={editorActions}
         />
       );
@@ -263,167 +328,108 @@ function App() {
     );
   };
 
-  const [sidebarWidth, setSidebarWidth] = useState(250);
-  const [isResizing, setIsResizing] = useState(false);
-
-  // Resize handlers
-  const startResizing = useCallback(() => {
-    setIsResizing(true);
-  }, []);
-
-  const stopResizing = useCallback(() => {
-    setIsResizing(false);
-  }, []);
-
-  const resize = useCallback(
-    (mouseMoveEvent: { clientX: number }) => {
-      if (isResizing) {
-        setSidebarWidth(mouseMoveEvent.clientX);
-      }
-    },
-    [isResizing]
-  );
-
-  useEffect(() => {
-    window.addEventListener("mousemove", resize);
-    window.addEventListener("mouseup", stopResizing);
-    return () => {
-      window.removeEventListener("mousemove", resize);
-      window.removeEventListener("mouseup", stopResizing);
-    };
-  }, [resize, stopResizing]);
-
-  const handleFileOpen = async (path: string, preview: boolean) => {
-    // If preview is true, we might want to reuse a "preview" tab if one exists
-    // For now, let's just open it as a normal tab, but maybe mark it as preview?
-    // The current Tab system doesn't support 'preview' state explicitly yet.
-    // We'll just open it. Improved "preview vs pin" logic would require Tab state updates.
-
-    // Suppress unused warning
-    console.debug('Opening file (preview: ' + preview + ')', path);
-
-    // Check if tab already exists
-    const existingTab = tabs.find(t => t.path === path);
-    if (existingTab) {
-      setActiveTabId(existingTab.id);
-      return;
-    }
-
-    const file = await readFileContent(path);
-    if (file) {
-      addTab(file.path, file.name, file.content, file.language);
-    }
-  };
-
   return (
     <div className="app">
-      <div style={{ width: sidebarWidth, flexShrink: 0, display: 'flex' }}>
-        <FileBrowser
-          onFileOpen={handleFileOpen}
-          onOpenFolder={openFolder}
-          onReadDirectory={readDirectory}
-        />
-        <div
-          className="sidebar-resizer"
-          onMouseDown={startResizing}
-          style={{
-            width: '5px',
-            cursor: 'col-resize',
-            backgroundColor: isResizing ? '#007acc' : 'transparent',
-            height: '100%',
-            borderRight: '1px solid #333'
-          }}
-        />
-      </div>
-      <div className="main-column">
-        <div className="header">
-          <div className="menu-bar">
-            <button onClick={() => setShowNewFileModal(true)} className="menu-button">
-              New File
+      <div className="header">
+        <div className="menu-bar">
+          <button onClick={handleToggleSidebar} className="menu-button" title="Toggle Sidebar (Cmd+B)">
+            <SidebarIcon size={16} />
+          </button>
+          <button onClick={() => setShowNewFileModal(true)} className="menu-button">
+            <FilePlusIcon size={16} />
+            New
+          </button>
+          <button onClick={handleOpenFile} className="menu-button">
+            <FolderOpenIcon size={16} />
+            Open
+          </button>
+          {activeTab && (
+            <button onClick={handleSaveFile} className="menu-button">
+              <SaveIcon size={16} />
+              Save
+              {activeTab.isDirty && <span className="dirty-indicator" />}
             </button>
-            <button onClick={handleOpenFile} className="menu-button">
-              Open File
-            </button>
-            {activeTab && (
-              <button onClick={handleSaveFile} className="menu-button">
-                Save {activeTab.isDirty && '•'}
-              </button>
-            )}
-            {activeTab && activeTab.language === 'markdown' && (
-              <button onClick={handleToggleViewMode} className="menu-button">
-                {activeTab.viewMode === 'rendered' ? 'Edit Raw' : 'Show Rendered'}
-              </button>
-            )}
-          </div>
+          )}
         </div>
-        <TabBar
-          tabs={tabs}
-          activeTabId={activeTabId}
-          onTabClick={setActiveTabId}
-          onTabClose={closeTab}
-        />
-        <div className="content">
-          {renderViewer()}
+      </div>
+      <div className="main-container">
+        {sidebarVisible && (
+          <FileTree
+            onFileSelect={handleFileSelect}
+            rootPath={folderPath}
+            onRootPathChange={setFolderPath}
+            width={sidebarWidth}
+            onWidthChange={setSidebarWidth}
+          />
+        )}
+        <div className="editor-container">
+          <TabBar
+            tabs={tabs}
+            activeTabId={activeTabId}
+            onTabClick={setActiveTabId}
+            onTabClose={closeTab}
+          />
+          <div className="content">
+            {renderViewer()}
+          </div>
         </div>
       </div>
 
       {/* New File Modal */}
-      {
-        showNewFileModal && (
-          <div className="modal-overlay" onClick={() => setShowNewFileModal(false)}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              <h2>Create New File</h2>
-              <p>Select file type:</p>
-              <div className="file-type-grid">
-                <button className="file-type-button" onClick={() => handleNewFile('markdown')}>
-                  <span className="file-type-icon">📝</span>
-                  <span className="file-type-name">Markdown</span>
-                  <span className="file-type-ext">.md</span>
-                </button>
-                <button className="file-type-button" onClick={() => handleNewFile('html')}>
-                  <span className="file-type-icon">🌐</span>
-                  <span className="file-type-name">HTML</span>
-                  <span className="file-type-ext">.html</span>
-                </button>
-                <button className="file-type-button" onClick={() => handleNewFile('json')}>
-                  <span className="file-type-icon">📋</span>
-                  <span className="file-type-name">JSON</span>
-                  <span className="file-type-ext">.json</span>
-                </button>
-                <button className="file-type-button" onClick={() => handleNewFile('javascript')}>
-                  <span className="file-type-icon">⚡</span>
-                  <span className="file-type-name">JavaScript</span>
-                  <span className="file-type-ext">.js</span>
-                </button>
-                <button className="file-type-button" onClick={() => handleNewFile('typescript')}>
-                  <span className="file-type-icon">💠</span>
-                  <span className="file-type-name">TypeScript</span>
-                  <span className="file-type-ext">.ts</span>
-                </button>
-                <button className="file-type-button" onClick={() => handleNewFile('css')}>
-                  <span className="file-type-icon">🎨</span>
-                  <span className="file-type-name">CSS</span>
-                  <span className="file-type-ext">.css</span>
-                </button>
-                <button className="file-type-button" onClick={() => handleNewFile('python')}>
-                  <span className="file-type-icon">🐍</span>
-                  <span className="file-type-name">Python</span>
-                  <span className="file-type-ext">.py</span>
-                </button>
-                <button className="file-type-button" onClick={() => handleNewFile('text')}>
-                  <span className="file-type-icon">📄</span>
-                  <span className="file-type-name">Text</span>
-                  <span className="file-type-ext">.txt</span>
-                </button>
-              </div>
-              <button className="modal-close-button" onClick={() => setShowNewFileModal(false)}>
-                Cancel
+      {showNewFileModal && (
+        <div className="modal-overlay" onClick={() => setShowNewFileModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2>Create New File</h2>
+            <p>Select file type:</p>
+            <div className="file-type-grid">
+              <button className="file-type-button" onClick={() => handleNewFile('markdown')}>
+                <span className="file-type-icon"><MarkdownIcon size={28} className="icon-markdown" /></span>
+                <span className="file-type-name">Markdown</span>
+                <span className="file-type-ext">.md</span>
+              </button>
+              <button className="file-type-button" onClick={() => handleNewFile('html')}>
+                <span className="file-type-icon"><HtmlIcon size={28} className="icon-html" /></span>
+                <span className="file-type-name">HTML</span>
+                <span className="file-type-ext">.html</span>
+              </button>
+              <button className="file-type-button" onClick={() => handleNewFile('json')}>
+                <span className="file-type-icon"><JsonIcon size={28} className="icon-json" /></span>
+                <span className="file-type-name">JSON</span>
+                <span className="file-type-ext">.json</span>
+              </button>
+              <button className="file-type-button" onClick={() => handleNewFile('javascript')}>
+                <span className="file-type-icon"><CodeIcon size={28} className="icon-javascript" /></span>
+                <span className="file-type-name">JavaScript</span>
+                <span className="file-type-ext">.js</span>
+              </button>
+              <button className="file-type-button" onClick={() => handleNewFile('typescript')}>
+                <span className="file-type-icon"><TypeScriptIcon size={28} className="icon-typescript" /></span>
+                <span className="file-type-name">TypeScript</span>
+                <span className="file-type-ext">.ts</span>
+              </button>
+              <button className="file-type-button" onClick={() => handleNewFile('css')}>
+                <span className="file-type-icon"><CssIcon size={28} className="icon-css" /></span>
+                <span className="file-type-name">CSS</span>
+                <span className="file-type-ext">.css</span>
+              </button>
+              <button className="file-type-button" onClick={() => handleNewFile('python')}>
+                <span className="file-type-icon"><PythonIcon size={28} className="icon-python" /></span>
+                <span className="file-type-name">Python</span>
+                <span className="file-type-ext">.py</span>
+              </button>
+              <button className="file-type-button" onClick={() => handleNewFile('text')}>
+                <span className="file-type-icon"><FileIcon size={28} /></span>
+                <span className="file-type-name">Text</span>
+                <span className="file-type-ext">.txt</span>
               </button>
             </div>
+            <button className="modal-close-button" onClick={() => setShowNewFileModal(false)}>
+              Cancel
+            </button>
           </div>
-        )
-      }
-    </div >
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -1,4 +1,3 @@
-
 import { open, save } from '@tauri-apps/api/dialog';
 import { readTextFile, writeTextFile, readDir, FileEntry } from '@tauri-apps/api/fs';
 
@@ -51,6 +50,19 @@ export const useFile = () => {
     }
   };
 
+  const openFilePath = async (filePath: string): Promise<{ path: string; content: string; name: string; language: string } | null> => {
+    try {
+      const content = await readTextFile(filePath);
+      const name = filePath.split('/').pop() || filePath.split('\\').pop() || 'Untitled';
+      const language = getLanguageFromPath(filePath);
+
+      return { path: filePath, content, name, language };
+    } catch (error) {
+      console.error('Failed to open file:', error);
+      return null;
+    }
+  };
+
   const openFolder = async (): Promise<FileEntry[] | null> => {
     try {
       const selected = await open({
@@ -60,14 +72,6 @@ export const useFile = () => {
       });
 
       if (!selected || Array.isArray(selected)) return null;
-
-      // When opening a folder, we read its contents immediately (non-recursive for performance)
-      // The FileTree component will handle lazy loading of subdirectories
-      // Note: 'selected' from 'open' dialog is just the path string.  
-      // We manually add the root folder itself to the list so the tree has a root.
-      // Actually, standard file trees usually show the contents of the opened folder.
-      // But creating a "Root" entry helps if we want to show the folder name itself capable of being collapsed.
-      // For now, let's return the content of the selected folder.
 
       const entries = await readDir(selected, { recursive: true });
       return entries;
@@ -99,12 +103,21 @@ export const useFile = () => {
     }
   };
 
-  const createNewFile = async (fileType: string): Promise<{ path: string; content: string; name: string; language: string } | null> => {
-    try {
-      // Get default extension and template content based on file type
-      const { extension, content: templateContent } = getTemplateForFileType(fileType);
+  // Create a new untitled file in memory (not saved to disk)
+  const createUntitledFile = (fileType: string, untitledNumber: number): { path: string; content: string; name: string; language: string } => {
+    const { extension, content: templateContent } = getTemplateForFileType(fileType);
+    const name = `Untitled-${untitledNumber}.${extension}`;
+    const path = `untitled://${name}`;
+    const language = getLanguageFromExtension(extension);
 
-      // Show save dialog with suggested extension
+    return { path, content: templateContent, name, language };
+  };
+
+  // Save an untitled file - prompts for location
+  const saveUntitledFile = async (content: string, fileType: string): Promise<{ path: string; name: string; language: string } | null> => {
+    try {
+      const { extension } = getTemplateForFileType(fileType);
+
       const selected = await save({
         filters: [{
           name: fileType.charAt(0).toUpperCase() + fileType.slice(1) + ' File',
@@ -115,32 +128,74 @@ export const useFile = () => {
 
       if (!selected) return null;
 
-      // Write template content to file
-      await writeTextFile(selected, templateContent);
+      await writeTextFile(selected, content);
 
-      // Extract file name
       const name = selected.split('/').pop() || selected.split('\\').pop() || 'Untitled';
-
-      // Detect language
       const language = getLanguageFromPath(selected);
 
-      return { path: selected, content: templateContent, name, language };
+      return { path: selected, name, language };
     } catch (error) {
-      console.error('Failed to create file:', error);
+      console.error('Failed to save file:', error);
       return null;
     }
   };
 
   return {
     openFile,
+    openFilePath,
     saveFile,
     saveFileAs,
     openFolder,
     readDirectory,
     readFileContent,
-    createNewFile,
+    createUntitledFile,
+    saveUntitledFile,
   };
 };
+
+// Check if a path is an untitled file
+export const isUntitledPath = (path: string): boolean => {
+  return path.startsWith('untitled://');
+};
+
+// Get language from file type
+export const getLanguageForFileType = (fileType: string): string => {
+  const languageMap: { [key: string]: string } = {
+    'markdown': 'markdown',
+    'json': 'json',
+    'javascript': 'javascript',
+    'typescript': 'typescript',
+    'html': 'html',
+    'css': 'css',
+    'python': 'python',
+    'text': 'plaintext',
+  };
+  return languageMap[fileType] || 'plaintext';
+};
+
+function getLanguageFromExtension(ext: string): string {
+  const languageMap: { [key: string]: string } = {
+    'md': 'markdown',
+    'markdown': 'markdown',
+    'json': 'json',
+    'js': 'javascript',
+    'jsx': 'javascript',
+    'ts': 'typescript',
+    'tsx': 'typescript',
+    'css': 'css',
+    'html': 'html',
+    'xml': 'xml',
+    'py': 'python',
+    'rs': 'rust',
+    'go': 'go',
+    'java': 'java',
+    'yml': 'yaml',
+    'yaml': 'yaml',
+    'txt': 'plaintext',
+  };
+
+  return languageMap[ext.toLowerCase()] || 'plaintext';
+}
 
 function getLanguageFromPath(path: string): string {
   const ext = path.split('.').pop()?.toLowerCase();
