@@ -35,6 +35,16 @@ export const useTabs = () => {
     });
   }, [activeTabId]);
 
+  const closeOtherTabs = useCallback((id: string) => {
+    setTabs(prev => prev.filter(tab => tab.id === id));
+    setActiveTabId(id);
+  }, []);
+
+  const closeAllTabs = useCallback(() => {
+    setTabs([]);
+    setActiveTabId(null);
+  }, []);
+
   const updateTabContent = useCallback((id: string, content: string) => {
     setTabs(prev =>
       prev.map(tab =>
@@ -80,6 +90,8 @@ export const useTabs = () => {
     setActiveTabId,
     addTab,
     closeTab,
+    closeOtherTabs,
+    closeAllTabs,
     updateTabContent,
     toggleViewMode,
     markTabSaved,

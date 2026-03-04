@@ -11,14 +11,20 @@ export interface MonacoAction {
   run: () => void;
 }
 
+export interface CursorPosition {
+  lineNumber: number;
+  column: number;
+}
+
 interface CodeEditorProps {
   content: string;
   language: string;
   onChange: (value: string) => void;
   actions?: MonacoAction[];
+  onCursorChange?: (position: CursorPosition) => void;
 }
 
-export const CodeEditor = ({ content, language, onChange, actions }: CodeEditorProps) => {
+export const CodeEditor = ({ content, language, onChange, actions, onCursorChange }: CodeEditorProps) => {
   const handleChange = (value: string | undefined) => {
     if (value !== undefined) {
       onChange(value);
@@ -37,6 +43,17 @@ export const CodeEditor = ({ content, language, onChange, actions }: CodeEditorP
           contextMenuOrder: action.contextMenuOrder || 1,
           run: () => action.run(),
         });
+      });
+    }
+
+    // Report cursor position changes
+    if (onCursorChange) {
+      const pos = editor.getPosition();
+      if (pos) {
+        onCursorChange({ lineNumber: pos.lineNumber, column: pos.column });
+      }
+      editor.onDidChangeCursorPosition((e) => {
+        onCursorChange({ lineNumber: e.position.lineNumber, column: e.position.column });
       });
     }
   };

@@ -1,17 +1,21 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { listen } from '@tauri-apps/api/event';
+import { appWindow } from '@tauri-apps/api/window';
+import { getMatches } from '@tauri-apps/api/cli';
+import { confirm } from '@tauri-apps/api/dialog';
 import { useTabs } from './hooks/useTabs';
 import { useFile, isUntitledPath } from './hooks/useFile';
+import { useRecentFiles } from './hooks/useRecentFiles';
+import { useSessionPersistence } from './hooks/useSessionPersistence';
 import { TabBar } from './components/TabBar/TabBar';
 import { FileTree } from './components/FileTree/FileTree';
+import { StatusBar } from './components/StatusBar/StatusBar';
 import { MarkdownViewer } from './components/Viewers/MarkdownViewer';
 import { JsonViewer } from './components/Viewers/JsonViewer';
 import { HtmlViewer } from './components/Viewers/HtmlViewer';
-import { CodeEditor, MonacoAction } from './components/Viewers/CodeEditor';
+import { CodeEditor, MonacoAction, CursorPosition } from './components/Viewers/CodeEditor';
 import {
-  SidebarIcon,
   FilePlusIcon,
-  FolderOpenIcon,
-  SaveIcon,
   MarkdownIcon,
   HtmlIcon,
   JsonIcon,
@@ -30,6 +34,8 @@ function App() {
     setActiveTabId,
     addTab,
     closeTab,
+    closeOtherTabs,
+    closeAllTabs,
     updateTabContent,
     toggleViewMode,
     markTabSaved,
@@ -37,14 +43,33 @@ function App() {
     getActiveTab,
   } = useTabs();
 
-  const { openFile, openFilePath, saveFile, createUntitledFile, saveUntitledFile } = useFile();
+  const { openFile, openFilePath, saveFile, saveFileAs, createUntitledFile, saveUntitledFile } = useFile();
+  const { recentFiles, addRecentFile } = useRecentFiles();
+  const { saveSession, restoreSession } = useSessionPersistence();
   const untitledCounter = useRef(1);
 
   const [showNewFileModal, setShowNewFileModal] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(250);
   const [folderPath, setFolderPath] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [cursorPosition, setCursorPosition] = useState<CursorPosition | null>(null);
   const activeTab = getActiveTab();
+
+  // Refs for stable access in event listeners
+  const tabsRef = useRef(tabs);
+  const activeTabRef = useRef(activeTab);
+  const activeTabIdRef = useRef(activeTabId);
+  const sidebarVisibleRef = useRef(sidebarVisible);
+  const sidebarWidthRef = useRef(sidebarWidth);
+  const folderPathRef = useRef(folderPath);
+
+  useEffect(() => { tabsRef.current = tabs; }, [tabs]);
+  useEffect(() => { activeTabRef.current = activeTab; }, [activeTab]);
+  useEffect(() => { activeTabIdRef.current = activeTabId; }, [activeTabId]);
+  useEffect(() => { sidebarVisibleRef.current = sidebarVisible; }, [sidebarVisible]);
+  useEffect(() => { sidebarWidthRef.current = sidebarWidth; }, [sidebarWidth]);
+  useEffect(() => { folderPathRef.current = folderPath; }, [folderPath]);
 
   // Define handler functions with useCallback
   const handleNewFile = useCallback((fileType: string) => {
@@ -58,15 +83,15 @@ function App() {
     const file = await openFile();
     if (file) {
       addTab(file.path, file.name, file.content, file.language);
+      addRecentFile(file.path, file.name);
     }
-  }, [openFile, addTab]);
+  }, [openFile, addTab, addRecentFile]);
 
   const handleSaveFile = useCallback(async () => {
-    if (!activeTab) return;
+    const tab = activeTabRef.current;
+    if (!tab) return;
 
-    // Check if this is an untitled file
-    if (isUntitledPath(activeTab.path)) {
-      // Get file type from language
+    if (isUntitledPath(tab.path)) {
       const fileTypeMap: { [key: string]: string } = {
         'markdown': 'markdown',
         'json': 'json',
@@ -77,19 +102,32 @@ function App() {
         'python': 'python',
         'plaintext': 'text',
       };
-      const fileType = fileTypeMap[activeTab.language] || 'text';
+      const fileType = fileTypeMap[tab.language] || 'text';
 
-      const result = await saveUntitledFile(activeTab.content, fileType);
+      const result = await saveUntitledFile(tab.content, fileType);
       if (result) {
-        updateTabPathAndName(activeTab.id, result.path, result.name, result.language);
+        updateTabPathAndName(tab.id, result.path, result.name, result.language);
+        addRecentFile(result.path, result.name);
       }
     } else {
-      const success = await saveFile(activeTab.path, activeTab.content);
+      const success = await saveFile(tab.path, tab.content);
       if (success) {
-        markTabSaved(activeTab.id);
+        markTabSaved(tab.id);
       }
     }
-  }, [activeTab, saveFile, saveUntitledFile, markTabSaved, updateTabPathAndName]);
+  }, [saveFile, saveUntitledFile, markTabSaved, updateTabPathAndName, addRecentFile]);
+
+  const handleSaveAs = useCallback(async () => {
+    const tab = activeTabRef.current;
+    if (!tab) return;
+
+    const path = await saveFileAs(tab.content);
+    if (path) {
+      const name = path.split('/').pop() || path.split('\\').pop() || 'Untitled';
+      updateTabPathAndName(tab.id, path, name);
+      addRecentFile(path, name);
+    }
+  }, [saveFileAs, updateTabPathAndName, addRecentFile]);
 
   const handleContentChange = useCallback((content: string) => {
     if (activeTab) {
@@ -104,8 +142,7 @@ function App() {
   }, [activeTab, toggleViewMode]);
 
   const handleFileSelect = useCallback(async (path: string) => {
-    // Check if file is already open
-    const existingTab = tabs.find(tab => tab.path === path);
+    const existingTab = tabsRef.current.find(tab => tab.path === path);
     if (existingTab) {
       setActiveTabId(existingTab.id);
       return;
@@ -114,12 +151,26 @@ function App() {
     const file = await openFilePath(path);
     if (file) {
       addTab(file.path, file.name, file.content, file.language);
+      addRecentFile(file.path, file.name);
     }
-  }, [tabs, openFilePath, addTab, setActiveTabId]);
+  }, [openFilePath, addTab, setActiveTabId, addRecentFile]);
 
   const handleToggleSidebar = useCallback(() => {
     setSidebarVisible(prev => !prev);
   }, []);
+
+  // Check if tab is dirty before closing
+  const handleCloseTab = useCallback(async (id: string) => {
+    const tab = tabsRef.current.find(t => t.id === id);
+    if (tab && tab.isDirty) {
+      const shouldClose = await confirm(
+        `"${tab.name}" has unsaved changes. Close anyway?`,
+        { title: 'Unsaved Changes', type: 'warning' }
+      );
+      if (!shouldClose) return;
+    }
+    closeTab(id);
+  }, [closeTab]);
 
   // Build Monaco command palette actions
   const editorActions = useMemo((): MonacoAction[] => {
@@ -142,7 +193,6 @@ function App() {
       },
     ];
 
-    // Add save action if there's an active tab
     if (activeTab) {
       actions.push({
         id: 'file.save',
@@ -159,10 +209,9 @@ function App() {
         keybindings: [],
         contextMenuGroupId: '0_file',
         contextMenuOrder: 4,
-        run: () => closeTab(activeTab.id),
+        run: () => handleCloseTab(activeTab.id),
       });
 
-      // Add view mode toggle based on file type
       if (activeTab.language === 'markdown') {
         actions.push({
           id: 'view.toggleMarkdown',
@@ -194,71 +243,162 @@ function App() {
     }
 
     return actions;
-  }, [activeTab, activeTabId, handleOpenFile, handleSaveFile, handleToggleViewMode, closeTab]);
+  }, [activeTab, activeTabId, handleOpenFile, handleSaveFile, handleToggleViewMode, handleCloseTab]);
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts (only those NOT handled by the native menu)
   useEffect(() => {
-    const handleKeyDown = async (e: KeyboardEvent) => {
-      // Cmd+N or Ctrl+N - New file
-      if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
-        e.preventDefault();
-        setShowNewFileModal(true);
-      }
-
-      // Cmd+O or Ctrl+O - Open file
-      if ((e.metaKey || e.ctrlKey) && e.key === 'o') {
-        e.preventDefault();
-        await handleOpenFile();
-      }
-
-      // Cmd+S or Ctrl+S - Save file
-      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
-        e.preventDefault();
-        await handleSaveFile();
-      }
-
-      // Cmd+W or Ctrl+W - Close tab
-      if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
-        e.preventDefault();
-        if (activeTabId) {
-          closeTab(activeTabId);
-        }
-      }
-
+    const handleKeyDown = (e: KeyboardEvent) => {
       // Cmd+Shift+M - Toggle Markdown view mode
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'M') {
         e.preventDefault();
-        if (activeTab && activeTab.language === 'markdown') {
-          toggleViewMode(activeTab.id);
+        const tab = activeTabRef.current;
+        if (tab && tab.language === 'markdown') {
+          toggleViewMode(tab.id);
         }
       }
 
       // Cmd+Shift+J - Toggle JSON view mode
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'J') {
         e.preventDefault();
-        if (activeTab && activeTab.language === 'json') {
-          toggleViewMode(activeTab.id);
+        const tab = activeTabRef.current;
+        if (tab && tab.language === 'json') {
+          toggleViewMode(tab.id);
         }
       }
 
       // Cmd+Shift+H - Toggle HTML view mode
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'H') {
         e.preventDefault();
-        if (activeTab && activeTab.language === 'html') {
-          toggleViewMode(activeTab.id);
+        const tab = activeTabRef.current;
+        if (tab && tab.language === 'html') {
+          toggleViewMode(tab.id);
         }
-      }
-
-      // Cmd+B or Ctrl+B - Toggle sidebar
-      if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
-        e.preventDefault();
-        handleToggleSidebar();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeTabId, activeTab, handleOpenFile, handleSaveFile, handleToggleSidebar]);
+  }, [toggleViewMode]);
+
+  // Menu event listener from native menu bar
+  useEffect(() => {
+    const unlisten = listen<string>('menu-event', async (event) => {
+      switch (event.payload) {
+        case 'new_file':
+          setShowNewFileModal(true);
+          break;
+        case 'open_file':
+          handleOpenFile();
+          break;
+        case 'save':
+          handleSaveFile();
+          break;
+        case 'save_as':
+          handleSaveAs();
+          break;
+        case 'close_tab': {
+          const tabId = activeTabIdRef.current;
+          if (tabId) handleCloseTab(tabId);
+          break;
+        }
+        case 'toggle_sidebar':
+          handleToggleSidebar();
+          break;
+        case 'quit':
+          appWindow.close();
+          break;
+      }
+    });
+
+    return () => { unlisten.then(fn => fn()); };
+  }, [handleOpenFile, handleSaveFile, handleSaveAs, handleCloseTab, handleToggleSidebar]);
+
+  // CLI argument support - open files passed as arguments
+  useEffect(() => {
+    getMatches().then(matches => {
+      const fileArgs = matches.args['file'];
+      if (fileArgs && fileArgs.value) {
+        const files = Array.isArray(fileArgs.value) ? fileArgs.value : [fileArgs.value];
+        files.forEach((filePath: string | boolean) => {
+          if (typeof filePath === 'string' && filePath) handleFileSelect(filePath);
+        });
+      }
+    }).catch(() => {
+      // CLI not available (e.g., in dev mode), ignore
+    });
+  }, []);
+
+  // Drag & drop support
+  useEffect(() => {
+    const unlisten = appWindow.onFileDropEvent((event) => {
+      if (event.payload.type === 'hover') {
+        setIsDragging(true);
+      } else if (event.payload.type === 'drop') {
+        setIsDragging(false);
+        event.payload.paths.forEach(path => handleFileSelect(path));
+      } else if (event.payload.type === 'cancel') {
+        setIsDragging(false);
+      }
+    });
+
+    return () => { unlisten.then(fn => fn()); };
+  }, [handleFileSelect]);
+
+  // Unsaved changes warning on close
+  useEffect(() => {
+    const unlisten = appWindow.onCloseRequested(async (event) => {
+      const hasDirty = tabsRef.current.some(t => t.isDirty);
+      if (hasDirty) {
+        const shouldClose = await confirm(
+          'You have unsaved changes. Are you sure you want to quit?',
+          { title: 'Unsaved Changes', type: 'warning' }
+        );
+        if (!shouldClose) {
+          event.preventDefault();
+        }
+      }
+    });
+
+    return () => { unlisten.then(fn => fn()); };
+  }, []);
+
+  // Window title update
+  useEffect(() => {
+    if (activeTab) {
+      const modifier = activeTab.isDirty ? ' (modified)' : '';
+      appWindow.setTitle(`${activeTab.name}${modifier} - Markdown Viewer`);
+    } else {
+      appWindow.setTitle('Markdown Viewer');
+    }
+  }, [activeTab?.name, activeTab?.isDirty, activeTabId]);
+
+  // Session persistence - save on changes
+  useEffect(() => {
+    saveSession(tabs, sidebarVisible, sidebarWidth, folderPath);
+  }, [tabs, sidebarVisible, sidebarWidth, folderPath, saveSession]);
+
+  // Session persistence - restore on mount
+  useEffect(() => {
+    restoreSession().then(session => {
+      if (session && session.tabs.length > 0) {
+        session.tabs.forEach(tab => {
+          addTab(tab.path, tab.name, tab.content, tab.language);
+        });
+        setSidebarVisible(session.sidebarVisible);
+        setSidebarWidth(session.sidebarWidth);
+        if (session.folderPath) setFolderPath(session.folderPath);
+      }
+    });
+  }, []);
+
+  // Reset cursor position when switching tabs
+  useEffect(() => {
+    setCursorPosition(null);
+  }, [activeTabId]);
+
+  const handleCursorChange = useCallback((position: CursorPosition) => {
+    setCursorPosition(position);
+  }, []);
 
   const renderViewer = () => {
     if (!activeTab) {
@@ -267,14 +407,30 @@ function App() {
           <div className="empty-state-content">
             <h2>No File Open</h2>
             <p>Press <kbd>Cmd+N</kbd> to create a new file or <kbd>Cmd+O</kbd> to open an existing file</p>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginBottom: '24px' }}>
               <button onClick={() => setShowNewFileModal(true)} className="open-button">
+                <FilePlusIcon size={16} />
                 New File
               </button>
               <button onClick={handleOpenFile} className="open-button">
                 Open File
               </button>
             </div>
+            {recentFiles.length > 0 && (
+              <div className="recent-files">
+                <h3>Recent Files</h3>
+                <ul>
+                  {recentFiles.map(f => (
+                    <li key={f.path}>
+                      <button onClick={() => handleFileSelect(f.path)} className="recent-file-button">
+                        {f.name}
+                        <span className="recent-file-path">{f.path}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
       );
@@ -323,35 +479,14 @@ function App() {
           language={activeTab.language}
           onChange={handleContentChange}
           actions={editorActions}
+          onCursorChange={handleCursorChange}
         />
       </div>
     );
   };
 
   return (
-    <div className="app">
-      <div className="header">
-        <div className="menu-bar">
-          <button onClick={handleToggleSidebar} className="menu-button" title="Toggle Sidebar (Cmd+B)">
-            <SidebarIcon size={16} />
-          </button>
-          <button onClick={() => setShowNewFileModal(true)} className="menu-button">
-            <FilePlusIcon size={16} />
-            New
-          </button>
-          <button onClick={handleOpenFile} className="menu-button">
-            <FolderOpenIcon size={16} />
-            Open
-          </button>
-          {activeTab && (
-            <button onClick={handleSaveFile} className="menu-button">
-              <SaveIcon size={16} />
-              Save
-              {activeTab.isDirty && <span className="dirty-indicator" />}
-            </button>
-          )}
-        </div>
-      </div>
+    <div className={`app ${isDragging ? 'dragging' : ''}`}>
       <div className="main-container">
         {sidebarVisible && (
           <FileTree
@@ -367,13 +502,28 @@ function App() {
             tabs={tabs}
             activeTabId={activeTabId}
             onTabClick={setActiveTabId}
-            onTabClose={closeTab}
+            onTabClose={handleCloseTab}
+            onCloseOtherTabs={closeOtherTabs}
+            onCloseAllTabs={closeAllTabs}
           />
           <div className="content">
             {renderViewer()}
           </div>
         </div>
       </div>
+      <StatusBar
+        language={activeTab?.language || null}
+        cursorPosition={cursorPosition}
+        tabCount={tabs.length}
+      />
+
+      {isDragging && (
+        <div className="drag-overlay">
+          <div className="drag-overlay-content">
+            Drop files to open
+          </div>
+        </div>
+      )}
 
       {/* New File Modal */}
       {showNewFileModal && (

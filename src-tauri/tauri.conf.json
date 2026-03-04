@@ -28,7 +28,22 @@
       "shell": {
         "all": false,
         "open": true
+      },
+      "window": {
+        "all": false,
+        "setTitle": true,
+        "close": true
       }
+    },
+    "cli": {
+      "args": [
+        {
+          "name": "file",
+          "multiple": true,
+          "takesValue": true,
+          "index": 1
+        }
+      ]
     },
     "bundle": {
       "active": true,
@@ -40,7 +55,14 @@
         "icons/128x128@2x.png",
         "icons/icon.icns",
         "icons/icon.ico"
-      ]
+      ],
+      "macOS": {
+        "entitlements": null,
+        "exceptionDomain": "",
+        "frameworks": [],
+        "providerShortName": null,
+        "signingIdentity": null
+      }
     },
     "security": {
       "csp": null
